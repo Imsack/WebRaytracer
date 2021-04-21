@@ -1,5 +1,5 @@
-let width = 300;
-let height = 230;
+let width = 500;
+let height = 300;
 
 let zBuffer = [];
 let colorBuffer = [];
@@ -13,7 +13,6 @@ let Vector3D = function(x, y, z)
 	this.y = y;
 	this.z = z;
 }
-  	
 
 Vector3D.prototype.scaleIt = function(c)
 {
@@ -57,6 +56,12 @@ let Sphere = function(radius, position, color, reflectivity)
 	this.color = color;
     this.reflectivity = reflectivity;
 }
+
+let spheres = [
+	new Sphere(1, new Vector3D(0.5, 0, 7), new Vector3D(255, 0, 255), 1),
+	new Sphere(1, new Vector3D(3, 0.5, 12), new Vector3D(255, 255, 0), 1),
+	new Sphere(1, new Vector3D(-3, 0.75, 10), new Vector3D(0, 255, 255), 1)
+]
 
 function vectorAdd3D(vector1, vector2)
 {
@@ -132,7 +137,7 @@ function sphereIntersect(startPos, endPos, sphere, bufferX)
 
 	//if this number is negative, then taking the root of it will give
 	//an imaginary number which means that there is no intersection, so we exit the function
-	if(insideOfRoot < 0) return null;
+	if(insideOfRoot <= 0) return null;
 
 	let root = sqrt(insideOfRoot)
 
@@ -143,6 +148,9 @@ function sphereIntersect(startPos, endPos, sphere, bufferX)
 
 	let vec1 = new Vector3D(z1 * dzdx, z1 * dzdy, z1);
 	let vec2 = new Vector3D(z2 * dzdx, z2 * dzdy, z2);
+
+	vec1.scaleIt(0.999);
+	vec2.scaleIt(0.999);
 
 	//if the intersection occured in the opposite direction of the ray then we exit the function
 	//this can happen since we were treating the ray
@@ -178,12 +186,121 @@ function sphereIntersect(startPos, endPos, sphere, bufferX)
 	}
 
 	colorBuffer[bufferX] = sphere.color;
+	//console.log(colorBuffer[bufferX]);
 	hitBuffer[bufferX] += 1;
+
+	shade(intersection, bufferX)
+	//sphereTangent(intersection, sphere);
 }
 
-function sphereTangent()
+function shade(point, bufferX)
 {
+	let lightSource = new Sphere(100, new Vector3D(-100, -25, 5), new Vector3D(0, 0, 0), 1);
 
+	let hitCount = 0.70;
+
+	//how many rays we will send out to approximate smooth shadows
+	let numberOfRays = 60;
+
+	for(let i = 0; i < numberOfRays; i++)
+	{
+		let hit = 0;
+
+		let randomOffset = new Vector3D(Math.random(), Math.random(), Math.random());
+
+		randomOffset.scaleIt(lightSource.radius);
+
+		//each ray will be sent of in the general direction of the lightsource but with a random offset
+		let endPos = new Vector3D
+		(lightSource.position.x + randomOffset.x, 
+		lightSource.position.y + randomOffset.y, 
+		lightSource.position.z + randomOffset.z);
+
+		for(let j = 0; j < spheres.length; j++)
+		{
+			if(intersectsWithSphere(point, endPos, spheres[j]))
+			{
+				hit = 0.025;
+			}
+		}
+
+		hitCount += hit;
+	}
+
+	let shade = 1 / (hitCount * hitCount);
+
+	let color = colorBuffer[bufferX];
+
+	colorBuffer[bufferX] = new Vector3D(color.x * shade, color.y * shade, color.z * shade);
+}
+
+function intersectsWithSphere(startPos, endPos, sphere)
+{
+	//this is the same code as in the sphereIntersect function
+	//only it gives back a boolean for whether or not the ray intersects the sphere
+	//instead of the point of intersection
+	let dzdx = (endPos.x - startPos.x) / (endPos.z - startPos.z);
+	let dzdy = (endPos.y - startPos.y) / (endPos.z - startPos.z);
+
+	let a = dzdx * dzdx + dzdy * dzdy + 1;
+
+	let b = 2 * dzdx * (startPos.x - sphere.position.x) +
+	2 * dzdy * (startPos.y - sphere.position.y) +
+	2 * (startPos.z - sphere.position.z);
+
+	let c = (startPos.x - sphere.position.x) * (startPos.x - sphere.position.x) +
+	(startPos.y - sphere.position.y) * (startPos.y - sphere.position.y) +
+	(startPos.z - sphere.position.z) * (startPos.z - sphere.position.z) - sphere.radius * sphere.radius;
+
+	let insideOfRoot = b * b - 4 * a * c;
+
+	if(insideOfRoot < 0) return false;
+
+	let root = sqrt(insideOfRoot)
+
+	let z1 = (-b + root) / (2 * a);
+
+	let vec1 = new Vector3D(z1 * dzdx, z1 * dzdy, z1);
+
+	if(vectorDotproduct3D(vec1, vectorSubtract3D(endPos, startPos)) < 0)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+function sphereTangent(point, sphere)
+{
+	//this is the equation representing the sphere that we want to find the partial derivatives of
+	//(x - i)^2 + (y - j)^2 + (z - k)^2 = r^2
+
+	//expanding this equation we get:
+
+	//x^2 - 2xi + i^2 + y^2 - 2yj + j^2 + z^2 - 2zk + k^2 = r^2
+
+	//we want to find the partial derivate of z with respect to x
+	//and the partial derivative of z with respect to y
+
+	//dzdx (x^2 - 2xi + i^2 + y^2 - 2yj + j^2 + z^2 - 2zk + k^2) =
+	//2x - 2i + 2z*dzdx - 2k*dzdx
+	//dzdx (r^2) = 0
+	//we are then left with the equation 2x - 2i + 2z*dzdx - 2k*dzdx = 0
+	//we want to isolate dzdx
+	//2z*dzdx - 2k*dzdx = -(2x + 2i)
+	//dzdx(2z - 2k) = -2x + 2i
+	//dzdx = (-2x + 2i) / (2z - 2k)
+
+	//dzdy (x^2 - 2xi + i^2 + y^2 - 2yj + j^2 + z^2 - 2zk + k^2) =
+	//2y - 2j + 2z*dzdy - 2k*dzdy
+	//dzdy (r^2) = 0
+	//2y - 2j + 2z*dzdy - 2k*dzdy = 0
+	//2z*dzdy - 2k*dzdy = -(2y - 2j)
+	//dzdy(2z - 2k) = -2y + 2j
+	//dzdy = (-2y + 2j) / (2z - 2k)
+
+	let dzdx = (-2 * point.x + 2 * sphere.position.x) / (2 * point.z - 2 * sphere.position.z);
+	let dzdy = (-2 * point.y + 2 * sphere.position.y) / (2 * point.z - 2 * sphere.position.z);
 }
 
 function reflect(vector, tangent)
@@ -200,18 +317,12 @@ function setup()
 
 function draw()
 {
-	background(0);
-
 	for(let i = 0; i < width * height; i++)
 	{
 		zBuffer[i] = new Vector3D(Infinity, Infinity, Infinity);
 		colorBuffer[i] = new Vector3D(0, 0, 0);
 		hitBuffer[i] = 0.01;
 	}
-
-	let sphere1 = new Sphere(1, new Vector3D(0.5, 0, 7), new Vector3D(255, 0, 255), 1);
-	let sphere2 = new Sphere(1, new Vector3D(3, 0.5, 12), new Vector3D(255, 255, 0), 1);
-	let sphere3 = new Sphere(1, new Vector3D(-3, 0.75, 10), new Vector3D(0, 255, 255), 1);
 
 	let forward = (height / 2) / Math.tan(tau / 16);
 
@@ -228,9 +339,9 @@ function draw()
 			let bufferX = width * screenY + screenX;
 			//console.log(bufferX);
 
-			sphereIntersect(startVector, forwardVector, sphere1, bufferX);
-			sphereIntersect(startVector, forwardVector, sphere2, bufferX);
-			sphereIntersect(startVector, forwardVector, sphere3, bufferX);
+			sphereIntersect(startVector, forwardVector, spheres[0], bufferX);
+			sphereIntersect(startVector, forwardVector, spheres[1], bufferX);
+			sphereIntersect(startVector, forwardVector, spheres[2], bufferX);
 
 			let color = colorBuffer[bufferX];
 			//color.scaleIt(1 / hitBuffer[bufferX]);
