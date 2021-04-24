@@ -68,8 +68,8 @@ let Sphere = function(radius, position, color, reflectivity)
 
 let spheres = [
 	new Sphere(1, new Vector3D(0.5, 0, 7), new Vector3D(255, 0, 255), 1),
-	new Sphere(1, new Vector3D(4, 0.5, 12), new Vector3D(255, 255, 0), 1),
-	new Sphere(1, new Vector3D(-3, 0.75, 10), new Vector3D(0, 255, 255), 1)
+	new Sphere(1, new Vector3D(4, 0.5, 12), new Vector3D(255, 255, 0), 2),
+	new Sphere(1, new Vector3D(-3, 0.75, 10), new Vector3D(0, 255, 255), 3)
 ]
 
 function vectorAdd3D(vector1, vector2)
@@ -148,7 +148,7 @@ function sphereIntersect(startPos, endPos, sphere, bufferX, reflectivity)
 
 	//if this number is negative, then taking the root of it will give
 	//an imaginary number which means that there is no intersection, so we exit the function
-	if(insideOfRoot <= 0) return null;
+	if(insideOfRoot < 0) return;
 
 	let root = sqrt(insideOfRoot)
 
@@ -160,15 +160,15 @@ function sphereIntersect(startPos, endPos, sphere, bufferX, reflectivity)
 	let vec1 = new Vector3D(z1 * dxdz, z1 * dydz, z1);
 	let vec2 = new Vector3D(z2 * dxdz, z2 * dydz, z2);
 
-	vec1.scaleIt(0.999);
-	vec2.scaleIt(0.999);
+	vec1.scaleIt(0.99999);
+	vec2.scaleIt(0.99999);
 
 	//if the intersection occured in the opposite direction of the ray then we exit the function
 	//this can happen since we were treating the ray
 	//as an infinitely long line going in both directions in the intersection calculation
 	if(vectorDotproduct3D(vec1, vectorSubtract3D(endPos, startPos)) < 0)
 	{
-		return null;
+		return;
 	}
 
 	let intersection = new Vector3D(0, 0, 0);
@@ -180,7 +180,7 @@ function sphereIntersect(startPos, endPos, sphere, bufferX, reflectivity)
 	//the zBuffer at that given pixel we exit the function to not draw over any closer objects
 	if(sizeOfVec1 > zBuffer[bufferX] && sizeOfVec2 > zBuffer[bufferX])
 	{
-		return null;
+		return;
 	}
 
 	//we check which of the two vectors is the shortest to know which one we should use
@@ -198,11 +198,12 @@ function sphereIntersect(startPos, endPos, sphere, bufferX, reflectivity)
 
 	let color = colorBuffer[bufferX];
 	
-	colorBuffer[bufferX] = vectorAdd3D(color, sphere.color.scaled(reflectivity));
-	hitBuffer[bufferX] += reflectivity;
+	colorBuffer[bufferX] = vectorAdd3D(color, sphere.color.scaled(reflectivity / sphere.reflectivity));
+	hitBuffer[bufferX] += reflectivity / sphere.reflectivity;
 
-	let normal = sphereTangent(intersection, sphere);
-	//reflections(intersection, vectorSubtract3D(intersection, startPos), normal, bufferX, sphere);
+	let normal = sphereNormal(intersection, sphere);
+	let directionVector = vectorSubtract3D(startPos, intersection);
+	reflections(intersection, directionVector, normal, bufferX, reflectivity * (sphere.reflectivity - 1));
 	shade(intersection, bufferX, reflectivity);
 }
 
@@ -211,7 +212,7 @@ function floorIntersect(startPos, endPos, bufferX, reflectivity)
 	let dxdz = (endPos.x - startPos.x) / (endPos.z - startPos.z);
 	let dydz = (endPos.y - startPos.y) / (endPos.z - startPos.z);
 
-	if(dydz == 0) return null;
+	if(dydz == 0) return;
 
 	let yLevel = -1;
 
@@ -226,18 +227,18 @@ function floorIntersect(startPos, endPos, bufferX, reflectivity)
 
 	let z = (yLevel - startPos.y) / dydz;
 
-	if(z*z > zBuffer[bufferX]) return null;
+	if(z*z > zBuffer[bufferX]) return;
 
 	let intersection = new Vector3D(z * dxdz, z * dydz, z);
 
 	if(vectorDotproduct3D(intersection, vectorSubtract3D(endPos, startPos)) < 0)
 	{
-		return null;
+		return;
 	}
 
 	intersection = vectorAdd3D(intersection, startPos);
 
-	let offset = 1000000;
+	let offset = 100000000;
 	let floorScale = 100;
 
 	let imgX = Math.floor(intersection.x * floorScale) + offset;
@@ -251,12 +252,10 @@ function floorIntersect(startPos, endPos, bufferX, reflectivity)
 	colorBuffer[bufferX] = vectorAdd3D(bufferColor, floorColor);
 	hitBuffer[bufferX] += reflectivity;
 
-	if(numberOfBounces >= 1) return;
-
 	let directionVector = vectorSubtract3D(startPos, intersection);
 	directionVector.normalizeIt();
 
-	reflections(intersection, directionVector, new Vector3D(0, 1, 0), bufferX);
+	reflections(intersection, directionVector, new Vector3D(0, 1, 0), bufferX, 0.1);
 	shade(intersection, bufferX, reflectivity);
 }
 
@@ -287,7 +286,7 @@ function shade(point, bufferX, reflectivity)
 		{
 			if(intersectsWithSphere(point, endPos, spheres[j]))
 			{
-				hit = 0.02;
+				hit = 0.01;
 			}
 		}
 
@@ -337,56 +336,27 @@ function intersectsWithSphere(startPos, endPos, sphere)
 	return true;
 }
 
-function sphereTangent(point, sphere)
+function sphereNormal(point, sphere)
 {
-	//this is the equation representing the sphere that we want to find the partial derivatives of
-	//(x - i)^2 + (y - j)^2 + (z - k)^2 = r^2
-
-	//expanding this equation we get:
-
-	//x^2 - 2xi + i^2 + y^2 - 2yj + j^2 + z^2 - 2zk + k^2 = r^2
-
-	//we want to find the partial derivate of z with respect to x
-	//and the partial derivative of z with respect to y
-
-	//dzdx (x^2 - 2xi + i^2 + y^2 - 2yj + j^2 + z^2 - 2zk + k^2) =
-	//2x - 2i + 2z*dzdx - 2k*dzdx
-	//dzdx (r^2) = 0
-	//we are then left with the equation 2x - 2i + 2z*dzdx - 2k*dzdx = 0
-	//we want to isolate dzdx
-	//2z*dzdx - 2k*dzdx = -(2x + 2i)
-	//dzdx(2z - 2k) = -2x + 2i
-	//dzdx = (-2x + 2i) / (2z - 2k)
-
-	//dzdy (x^2 - 2xi + i^2 + y^2 - 2yj + j^2 + z^2 - 2zk + k^2) =
-	//2y - 2j + 2z*dzdy - 2k*dzdy
-	//dzdy (r^2) = 0
-	//2y - 2j + 2z*dzdy - 2k*dzdy = 0
-	//2z*dzdy - 2k*dzdy = -(2y - 2j)
-	//dzdy(2z - 2k) = -2y + 2j
-	//dzdy = (-2y + 2j) / (2z - 2k)
-
-	let dzdx = (-2 * point.x + 2 * sphere.position.x) / (2 * point.z - 2 * sphere.position.z);
-	let dzdy = (-2 * point.y + 2 * sphere.position.y) / (2 * point.z - 2 * sphere.position.z);
-
-	let vec1 = new Vector3D(1, 0, dzdx);
-	let vec2 = new Vector3D(0, 1, dzdy);
-	vec1.normalizeIt();
-	vec2.normalizeIt();
-	
-	let normal = vectorCrossproduct(vec1, vec2);
+	let normal = vectorSubtract3D(point, sphere.position).normalized();
 
 	return normal;
 }
 
-function reflections(point, directionVector, normal, bufferX)
+function reflections(point, directionVector, normal, bufferX, reflectivity)
 {
+	if(numberOfBounces >= 1) return;
+
+	numberOfBounces += 1;
+
 	let endPos = reflect(point, directionVector, normal);
 
 	for(let i = 0; i < spheres.length; i++)
 	{
-		sphereIntersect(point, endPos, spheres[i], bufferX, 0.1);
+		sphereIntersect(point, endPos, spheres[i], bufferX, reflectivity);
 	}
+
+	floorIntersect(point, endPos, bufferX, reflectivity);
 
 	let color = colorBuffer[bufferX];
 
@@ -405,6 +375,15 @@ function reflect(point, vector, normal)
 	let directionVector = vectorSubtract3D(normal, vector);
 
 	return vectorAdd3D(directionVector, point)
+}
+
+function blendReflections(bufferX)
+{
+	let color = colorBuffer[bufferX];
+
+	color.scaleIt(1 / hitBuffer[bufferX]);
+
+	colorBuffer[bufferX] = color;
 }
 
 function setup()
