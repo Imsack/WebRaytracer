@@ -40,6 +40,18 @@ Vector3D.prototype.squaredMagnitude = function()
 	return this.x * this.x + this.y * this.y + this.z * this.z;
 }
 
+function distance(v1, v2)
+{
+	return Math.sqrt((v2.x - v1.x) * (v2.x - v1.x) + 
+	(v2.y - v1.y) * (v2.y - v1.y) + (v2.z - v1.z) * (v2.z - v1.z));
+}
+
+function squaredDistance(v1, v2)
+{
+	return (v2.x - v1.x) * (v2.x - v1.x) + 
+	(v2.y - v1.y) * (v2.y - v1.y) + (v2.z - v1.z) * (v2.z - v1.z);
+}
+
 Vector3D.prototype.normalizeIt = function()
 {
     //normalizes the vector
@@ -67,10 +79,12 @@ let Sphere = function(radius, position, color, reflectivity)
 }
 
 let spheres = [
-	new Sphere(1, new Vector3D(0.5, 0, 7), new Vector3D(255, 0, 255), 0),
-	new Sphere(1, new Vector3D(4, 0.5, 12), new Vector3D(255, 255, 0), 0.5),
-	new Sphere(1, new Vector3D(-3, 0.75, 10), new Vector3D(0, 255, 255), 1)
+	new Sphere(1, new Vector3D(0.5, 0.3, 7), new Vector3D(234, 172, 255), 0),
+	new Sphere(1, new Vector3D(4, 0.5, 12), new Vector3D(239, 255, 172), 0.5),
+	new Sphere(1, new Vector3D(-3, 0.75, 10), new Vector3D(172, 250, 255), 7)
 ]
+
+let floorLevel = -1;
 
 function vectorAdd3D(vector1, vector2)
 {
@@ -178,7 +192,7 @@ function sphereIntersect(startPos, endPos, sphere, color, bufferX)
 
 	//if the depth at the intersection with the object is greater than what is in
 	//the zBuffer at that given pixel we exit the function to not draw over any closer objects
-	if(sizeOfVec1 > zBuffer[bufferX] && sizeOfVec2 > zBuffer[bufferX])
+	if(sizeOfVec1 >= zBuffer[bufferX] && sizeOfVec2 >= zBuffer[bufferX])
 	{
 		return color;
 	}
@@ -216,8 +230,6 @@ function floorIntersect(startPos, endPos, color, bufferX)
 
 	if(dydz == 0) return color;
 
-	let yLevel = -1;
-
 	//if the floor is at y = yLevel then the following equation
 	//must be true when the ray is intersecting the floor
 
@@ -227,20 +239,17 @@ function floorIntersect(startPos, endPos, color, bufferX)
 
 	//z = (yLevel - startPos.y) / dydz
 
-	let z = (yLevel - startPos.y) / dydz;
-
-	if(z*z > zBuffer[bufferX]) return color;
+	let z = (floorLevel - startPos.y) / dydz;
 
 	let intersection = new Vector3D(z * dxdz, z * dydz, z);
 
-	if(vectorDotproduct3D(intersection, vectorSubtract3D(endPos, startPos)) < 0)
-	{
-		return color;
-	}
+	if(intersection.squaredMagnitude() > zBuffer[bufferX]) return color;
+
+	if(vectorDotproduct3D(intersection, vectorSubtract3D(endPos, startPos)) < 0) return color;
 
 	intersection = vectorAdd3D(intersection, startPos);
 
-	intersection.y *= 0.99999;
+	intersection.y += 0.00001;
 
 	let offset = 100000000;
 	let floorScale = 100;
@@ -267,7 +276,8 @@ function floorIntersect(startPos, endPos, color, bufferX)
 
 function shade(point, color)
 {
-	let lightSource = new Sphere(100, new Vector3D(-110, -25, -20), new Vector3D(0, 0, 0), 1);
+	let lightSource = new Sphere(120, new Vector3D(-125, 35, 9), new Vector3D(0, 0, 0), 1);
+	let shadowIntensity = 0.0075;
 
 	let hitCount = 1;
 
@@ -280,6 +290,7 @@ function shade(point, color)
 
 		let randomOffset = new Vector3D(Math.random(), Math.random(), Math.random());
 
+		randomOffset.normalizeIt();
 		randomOffset.scaleIt(lightSource.radius);
 
 		//each ray will be sent of in the general direction of the lightsource but with a random offset
@@ -290,23 +301,22 @@ function shade(point, color)
 
 		for(let j = 0; j < spheres.length; j++)
 		{
-			if(intersectsWithSphere(point, endPos, spheres[j]))
-			{
-				hit = 0.01;
-			}
+			if(intersectsWithSphere(point, endPos, spheres[j], lightSource)) hit = shadowIntensity;
 		}
+
+		if(intersectsWithFloor(point, endPos, lightSource)) hit = shadowIntensity;
 
 		hitCount += hit;
 	}
 
-	let shade = 1 / (hitCount * hitCount);
+	let shade = 1 / (hitCount);
 
 	color.scaleIt(shade);
 
 	return color;
 }
 
-function intersectsWithSphere(startPos, endPos, sphere)
+function intersectsWithSphere(startPos, endPos, sphere, lightSource)
 {
 	//this is the same code as in the sphereIntersect function
 	//only it gives back a boolean for whether or not the ray intersects the sphere
@@ -332,12 +342,29 @@ function intersectsWithSphere(startPos, endPos, sphere)
 
 	let z1 = (-b + root) / (2 * a);
 
-	let vec1 = new Vector3D(z1 * dxdz, z1 * dydz, z1);
+	let vector = new Vector3D(z1 * dxdz, z1 * dydz, z1);
 
-	if(vectorDotproduct3D(vec1, vectorSubtract3D(endPos, startPos)) < 0)
-	{
-		return false;
-	}
+	if(vectorDotproduct3D(vector, vectorSubtract3D(endPos, startPos)) < 0) return false;
+
+	if(vector.magnitude() > distance(lightSource.position, startPos) - lightSource.radius) return false;
+
+	return true;
+}
+
+function intersectsWithFloor(startPos, endPos, lightSource)
+{
+	let dxdz = (endPos.x - startPos.x) / (endPos.z - startPos.z);
+	let dydz = (endPos.y - startPos.y) / (endPos.z - startPos.z);
+
+	if(dydz == 0) return false;
+
+	let z = (floorLevel - startPos.y) / dydz;
+
+	let vector = new Vector3D(z * dxdz, z * dydz, z);
+
+	if(vectorDotproduct3D(vector, vectorSubtract3D(endPos, startPos)) < 0) return false;
+
+	if(vector.magnitude() > distance(lightSource.position, startPos) - lightSource.radius) return false;
 
 	return true;
 }
@@ -395,7 +422,7 @@ function draw()
 	for(let i = 0; i < width * height; i++)
 	{
 		zBuffer[i] = new Vector3D(Infinity, Infinity, Infinity);
-		colorBuffer[i] = new Vector3D(0, 0, 0);
+		colorBuffer[i] = new Vector3D(206, 224, 236);
 		hitBuffer[i] = 0.01;
 	}
 
@@ -425,7 +452,7 @@ function draw()
 			//color.scaleIt(1 / hitBuffer[bufferX]);
 
 			fill(color.x, color.y, color.z);
-			rect(screenX, height - screenY, 1, 1);
+			rect(screenX, height - screenY - 1, 1, 1);
 		}
 	}
 }
