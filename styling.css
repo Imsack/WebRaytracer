@@ -35,6 +35,10 @@ button:hover {
     cursor: pointer;
 }
 
+#saveButton {
+    margin-top: 1em;
+}
+
 #inputWidth {
     all: unset;
     padding: 0.5em;
