@@ -3,12 +3,10 @@ let colorBuffer = [];
 let hitBuffer = [];
 
 let floorTexture;
-let skyTexture;
 
 function preload()
 {
 	floorTexture = loadImage("floorTexture.png");
-	skyTexture = loadImage("skyTexture.jpg");
 }
 
 let tau = 6.283185307179586;
@@ -99,7 +97,7 @@ Vector3D.prototype.normalized = function()
 	return new Vector3D(this.x / magnitude, this.y / magnitude, this.z / magnitude);
 }
 
-let Sphere = function(radius, position, color, reflectivity, diffusivity)
+let Sphere = function(radius, position, color, reflectivity, diffusivity, luminous)
 {
 	//position and color will be of type Vector3D
     this.radius = radius;
@@ -107,27 +105,25 @@ let Sphere = function(radius, position, color, reflectivity, diffusivity)
 	this.color = color;
     this.reflectivity = reflectivity;
 	this.diffusivity = diffusivity;
-}
-
-let Plane = function(level, texture, reflectivity, diffusivity)
-{
-	this.level = level;
-	this.texture = texture;
-	this.reflectivity = reflectivity;
-	this.diffusivity = diffusivity;
+	this.luminous = luminous;
 }
 
 let spheres = [
-	new Sphere(1, new Vector3D(0.5, 0.3, 7), new Vector3D(255, 0, 0), 0, 0),
-	new Sphere(1, new Vector3D(4, 0.5, 12), new Vector3D(0, 255, 0), 0.7, 0.5),
-	new Sphere(1, new Vector3D(-3, 0.75, 10), new Vector3D(0, 0, 400), 0, 0),
-	new Sphere(1.5, new Vector3D(-6, 1.5, 9), new Vector3D(255, 0, 0), 0.7, 0.6)
+	new Sphere(1, new Vector3D(0.5, 0.3, 7), new Vector3D(255, 0, 0), 0, 0, true),
+	new Sphere(1, new Vector3D(4, 0.5, 12), new Vector3D(0, 255, 0), 1.2, 0.3, false),
+	new Sphere(1, new Vector3D(-3, 0.75, 10), new Vector3D(0, 0, 255), 0, 0, true),
+	new Sphere(1.5, new Vector3D(-6, 1.5, 9), new Vector3D(255, 0, 255), 1.5, 0.7, false),
+	new Sphere(2, new Vector3D(6, 1.5, 9.5), new Vector3D(0, 255, 255), 2, 0.4, false),
+	new Sphere(3, new Vector3D(0, 2, 15), new Vector3D(255, 255, 0), 2, 0.3, false)
 ]
 
-let planes = [
-	new Plane(-1, floorTexture, 0.5, 0.3),
-	new Plane(3, skyTexture, 0, 0)
+let lightSources = [
+	spheres[0],
+	spheres[2]
 ]
+
+let floorLevel = -1;
+let skyColor = new Vector3D(9, 18, 25);
 
 function vectorAdd3D(vector1, vector2)
 {
@@ -255,17 +251,17 @@ function sphereIntersect(startPos, endPos, sphere, color, bufferX, bounceCount)
 	let directionVector = vectorSubtract3D(startPos, intersection);
 
 	let newColor = reflections(intersection, directionVector, 
-		normal, sphere.color, sphere.diffusivity, bufferX, bounceCount);
+		normal, sphere.reflectivity, sphere.diffusivity, bufferX, bounceCount);
 
 	let unshadedColor = vectorAdd3D(sphere.color, newColor.scaled(sphere.reflectivity));
 	unshadedColor.scaleIt(1 / (sphere.reflectivity + 1));
 
-	colorBuffer[bufferX] = shade(intersection, unshadedColor);
+	colorBuffer[bufferX] = shade(intersection, unshadedColor, sphere.luminous);
 
 	return colorBuffer[bufferX];
 }
 
-function planeIntersect(startPos, endPos, plane, color, bufferX, bounceCount)
+function floorIntersect(startPos, endPos, color, bufferX, bounceCount)
 {
 	let dxdz = (endPos.x - startPos.x) / (endPos.z - startPos.z);
 	let dydz = (endPos.y - startPos.y) / (endPos.z - startPos.z);
@@ -281,7 +277,7 @@ function planeIntersect(startPos, endPos, plane, color, bufferX, bounceCount)
 
 	//z = (yLevel - startPos.y) / dydz
 
-	let z = (plane.level - startPos.y) / dydz;
+	let z = (floorLevel - startPos.y) / dydz;
 
 	let intersection = new Vector3D(z * dxdz, z * dydz, z);
 
@@ -301,71 +297,80 @@ function planeIntersect(startPos, endPos, plane, color, bufferX, bounceCount)
 	let textureX = Math.floor(intersection.x * planeScale) + offset;
 	let textureY = Math.floor(intersection.z * planeScale) + offset;
 
-	let texture = plane.texture;
-
-	let texColor = texture.get(textureX % texture.width, textureY % texture.height);
+	let texColor = floorTexture.get(textureX % floorTexture.width, textureY % floorTexture.height);
 	let planeColor = new Vector3D(red(texColor), green(texColor), blue(texColor));
 
 	let directionVector = vectorSubtract3D(startPos, intersection);
 
+	let reflectivity = 0.5;
+
 	let newColor = reflections(intersection, directionVector, 
-		new Vector3D(0, 1, 0), planeColor, plane.diffusivity, bufferX, bounceCount);
+		new Vector3D(0, 1, 0), reflectivity, 0.2, bufferX, bounceCount);
 
-	let unshadedColor = vectorAdd3D(floorColor, newColor.scaled(plane.reflectivity));
-	unshadedColor.scaleIt(1 / (plane.reflectivity + 1));
+	let unshadedColor = vectorAdd3D(planeColor, newColor.scaled(reflectivity));
+	unshadedColor.scaleIt(1 / (reflectivity + 1));
 
-	colorBuffer[bufferX] = shade(intersection, unshadedColor);
+	colorBuffer[bufferX] = shade(intersection, unshadedColor, false);
 
 	return colorBuffer[bufferX];
 }
 
-function shade(point, color)
+function shade(point, color, luminous)
 {
-	let lightSource = spheres[2];
-
-	let hitCount = 1;
-
-	let shadowIntensity = (1 / (lightSource.radius * 20));
-	let distanceBetween = distance(point, lightSource.position) - lightSource.radius;
-
-	//how many rays we will send out to approximate smooth shadows
-	let numberOfRays = 90;
-
-	for(let i = 0; i < numberOfRays; i++)
+	if(luminous)
 	{
-		let hit = 0;
-
-		let randomOffset = new Vector3D(Math.random(), Math.random(), Math.random());
-		randomOffset.subtractConstant(0.5);
-
-		randomOffset.normalizeIt();
-		randomOffset.scaleIt(lightSource.radius);
-
-		//each ray will be sent of in the general direction of the lightsource but with a random offset
-		let endPos = new Vector3D
-		(lightSource.position.x + randomOffset.x, 
-		lightSource.position.y + randomOffset.y, 
-		lightSource.position.z + randomOffset.z);
-
-		for(let j = 0; j < spheres.length; j++)
-		{
-			if(intersectsWithSphere(point, endPos, spheres[j], lightSource)) hit = shadowIntensity;
-		}
-
-		for(let j = 0; j < planes.length; j++)
-		{
-			if(intersectsWithPlane(point, endPos, planes[j], lightSource)) hit = shadowIntensity;
-		}
-
-		hitCount += hit;
+		return color;
 	}
 
-	let shade = 1 / (hitCount);
+	let newColor = new Vector3D(0, 0, 0);
 
-	color.addVector3D(lightSource.color.scaled(shade));
-	color.scaleIt(shade * 0.5 / (distanceBetween + 1));
+	let totalBrightness = 0;
 
-	return color;
+	for(let i = 0; i < lightSources.length; i++)
+	{
+		let hitCount = 1;
+
+		let shadowIntensity = (1 / (lightSources[i].radius * 20));
+
+		//how many rays we will send out to approximate smooth shadows
+		let numberOfRays = 90;
+
+		for(let j = 0; j < numberOfRays; j++)
+		{
+			let hit = 0;
+
+			let randomOffset = new Vector3D(Math.random(), Math.random(), Math.random());
+			randomOffset.subtractConstant(0.5);
+
+			randomOffset.normalizeIt();
+			randomOffset.scaleIt(lightSources[i].radius);
+
+			//each ray will be sent of in the general direction of the lightsource but with a random offset
+			let endPos = new Vector3D
+			(lightSources[i].position.x + randomOffset.x, 
+			lightSources[i].position.y + randomOffset.y, 
+			lightSources[i].position.z + randomOffset.z);
+
+			for(let k = 0; k < spheres.length; k++)
+			{
+				if(intersectsWithSphere(point, endPos, spheres[k], lightSources[i])) hit = shadowIntensity;
+			}
+
+			if(intersectsWithFloor(point, endPos, lightSources[i])) hit = shadowIntensity;
+
+			hitCount += hit;
+		}
+
+		let distanceBetween = distance(point, lightSources[i].position) - lightSources[i].radius;
+		let brightness = 1 / (hitCount * distanceBetween + 1);
+		totalBrightness += brightness;
+
+		let tempColor = vectorAdd3D(color, lightSources[i].color).scaled(brightness);
+
+		newColor.addVector3D(tempColor);
+	}
+
+	return newColor.scaled(1 / (totalBrightness + 1));
 }
 
 function intersectsWithSphere(startPos, endPos, sphere, lightSource)
@@ -403,14 +408,14 @@ function intersectsWithSphere(startPos, endPos, sphere, lightSource)
 	return true;
 }
 
-function intersectsWithPlane(startPos, endPos, plane, lightSource)
+function intersectsWithFloor(startPos, endPos, lightSource)
 {
 	let dxdz = (endPos.x - startPos.x) / (endPos.z - startPos.z);
 	let dydz = (endPos.y - startPos.y) / (endPos.z - startPos.z);
 
 	if(dydz == 0) return false;
 
-	let z = (plane.level - startPos.y) / dydz;
+	let z = (floorLevel - startPos.y) / dydz;
 
 	let vector = new Vector3D(z * dxdz, z * dydz, z);
 
@@ -428,9 +433,11 @@ function sphereNormal(point, sphere)
 	return normal;
 }
 
-function reflections(point, directionVector, normal, color, diffusivity, bufferX, bounceCount)
+function reflections(point, directionVector, normal, reflectivity, diffusivity, bufferX, bounceCount)
 {
-	let newColor = color;
+	if(reflectivity == 0) return new Vector3D(0, 0, 0);
+
+	let newColor = skyColor;
 
 	if(bounceCount < 2)
 	{
@@ -440,7 +447,7 @@ function reflections(point, directionVector, normal, color, diffusivity, bufferX
 
 		let addedColor = new Vector3D(0, 0, 0);
 
-		let numberOfRays = 5;
+		let numberOfRays = 1 + (8 * diffusivity);
 
 		let depth = zBuffer[bufferX];
 
@@ -461,10 +468,8 @@ function reflections(point, directionVector, normal, color, diffusivity, bufferX
 			{
 				tempColor = sphereIntersect(point, endPos, spheres[j], tempColor, bufferX, bounceCount);
 			}
-			for(let j = 0; j < planes.length; j++)
-			{
-				tempColor = planeIntersect(point, endPos, planes[j], tempColor, bufferX, bounceCount);
-			}
+			
+			tempColor = floorIntersect(point, endPos, tempColor, bufferX, bounceCount);
 
 			addedColor.addVector3D(tempColor);
 
@@ -491,7 +496,7 @@ function reflect(point, vector, normal)
 
 function setup()
 {
-	createCanvas(750, 400);
+	createCanvas(innerWidth / 2, innerHeight / 2);
 	background(0);
 	noStroke();
 }
@@ -501,7 +506,7 @@ function draw()
 	for(let i = 0; i < width * height; i++)
 	{
 		zBuffer[i] = Infinity;
-		colorBuffer[i] = new Vector3D(0, 0, 0);
+		colorBuffer[i] = skyColor;
 	}
 
 	let forward = (height / 2) / Math.tan(tau / 16);
@@ -525,10 +530,8 @@ function draw()
 			{
 				sphereIntersect(startVector, forwardVector, spheres[i], spheres[i].color, bufferX, 0);
 			}
-			for(let i = 0; i < planes.length; i++)
-			{
-				planeIntersect(startVector, forwardVector, planes[i], new Vector3D(0, 0, 0), bufferX, 0);
-			}
+			
+			floorIntersect(startVector, forwardVector, new Vector3D(0, 0, 0), bufferX, 0);
 
 			let color = colorBuffer[bufferX];
 			
