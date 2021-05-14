@@ -13,14 +13,17 @@
     <header>
         <h1>Web Raytracer</h1>
     </header>
-    <div id="buttons">
-        <p>It can take up to a few minutes to render the canvas on higher resolutions.</p>
-        <div>
-            <button type="button" onclick="inputWidth()">Scale Resolution</button>
-            <input type="number" id="inputWidth" placeholder="width" required>
+    <main>
+        <div id="sketchHolder"></div>
+        <div id="buttons">
+            <p>It can take up to a few minutes to render the canvas on higher resolutions.</p>
+            <div>
+                <button type="button" onclick="inputWidth()">Scale Resolution</button>
+                <input type="number" id="inputWidth" placeholder="width" required>
+            </div>
+            <button type="button" onclick="saveCanvas('rayTracingExample', 'png')"
+            id="saveButton">Save Canvas as Image</button>
         </div>
-        <button type="button" onclick="saveCanvas('rayTracingExample', 'png')"
-         id="saveButton">Save Canvas as Image</button>
-    </div>
+    </main>
 </body>
 </html>

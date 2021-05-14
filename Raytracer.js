@@ -9,19 +9,32 @@ function preload()
 	floorTexture = loadImage("floorTexture.png");
 }
 
-let canvasWidth = innerWidth / 10;
+let heightToWidthRatio = 0.5625;
+
+canvasWidth = window.innerWidth / 10;
+canvasHeight = canvasWidth * heightToWidthRatio;
+
+function windowResized()
+{
+    if(window.innerWidth <= width) 
+	{
+		let newWidth = window.innerWidth * 0.9;
+		resizeCanvas(Math.floor(newWidth), Math.floor(newWidth * heightToWidthRatio));
+	}
+}
 
 function inputWidth()
 {
 	const inputWidth = document.querySelector("#inputWidth");
 	canvasWidth = inputWidth.value;
 
-	if(canvasWidth < innerWidth / 10) canvasWidth = innerWidth / 10;
+	if(canvasWidth < window.innerWidth / 10) canvasWidth = window.innerWidth / 10;
 
-	else if(canvasWidth > innerWidth / 1.3) canvasWidth = innerWidth / 1.3;
+	else if(canvasWidth > window.innerWidth / 1.3) canvasWidth = window.innerWidth / 1.3;
 
-	setup();
-	redraw();
+	canvasHeight = canvasWidth * heightToWidthRatio;
+
+	resizeCanvas(Math.floor(canvasWidth), Math.floor(canvasHeight));
 }
 
 let tau = 6.283185307179586;
@@ -511,7 +524,8 @@ function reflect(point, vector, normal)
 
 function setup()
 {
-	createCanvas(Math.floor(canvasWidth), Math.floor(canvasWidth * 0.55));
+	let canvas = createCanvas(Math.floor(canvasWidth), Math.floor(canvasHeight));
+	canvas.parent("sketchHolder");
 	background(0);
 	noStroke();
 	noLoop();

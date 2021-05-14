@@ -7,16 +7,22 @@ body {
     background-color: rgb(50, 50, 50);
 }
 
+main {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+}
+
 #buttons {
     width: 15em;
     display: flex;
     flex-direction: column;
-    flex-wrap: wrap;
     margin: 1em;
-    float: right;
 }
 
 #buttons p {
+    margin: 0;
+    margin-bottom: 1em;
     color: white;
     width: 100%;
 }
@@ -49,11 +55,13 @@ button:hover {
 }
 
 header {
+    margin: 0;
     padding: 0.4em;
     background: linear-gradient(to right, rgb(255, 0, 205), rgb(255, 77, 0));
 }
 
 h1 {
+    margin: 0;
+    padding: 0;
     font-family: "orbitron", "arial", sans-serif;
-    margin: 0.1em;
 }
