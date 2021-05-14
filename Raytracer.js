@@ -9,6 +9,21 @@ function preload()
 	floorTexture = loadImage("floorTexture.png");
 }
 
+let canvasWidth = innerWidth / 10;
+
+function inputWidth()
+{
+	const inputWidth = document.querySelector("#inputWidth");
+	canvasWidth = inputWidth.value;
+
+	if(canvasWidth < innerWidth / 10) canvasWidth = innerWidth / 10;
+
+	else if(canvasWidth > innerWidth / 1.3) canvasWidth = innerWidth / 1.3;
+
+	setup();
+	redraw();
+}
+
 let tau = 6.283185307179586;
 
 let Vector3D = function(x, y, z)
@@ -114,7 +129,7 @@ let spheres = [
 	new Sphere(1, new Vector3D(-3, 0.75, 10), new Vector3D(0, 0, 255), 0, 0, true),
 	new Sphere(1.5, new Vector3D(-6, 1.5, 9), new Vector3D(255, 0, 255), 1.5, 0.7, false),
 	new Sphere(2, new Vector3D(6, 1.5, 9.5), new Vector3D(0, 255, 255), 2, 0.4, false),
-	new Sphere(3, new Vector3D(0, 2, 15), new Vector3D(255, 255, 0), 2, 0.3, false)
+	new Sphere(3, new Vector3D(-1, 2, 15), new Vector3D(255, 255, 0), 2, 0.3, false)
 ]
 
 let lightSources = [
@@ -333,7 +348,7 @@ function shade(point, color, luminous)
 		let shadowIntensity = (1 / (lightSources[i].radius * 20));
 
 		//how many rays we will send out to approximate smooth shadows
-		let numberOfRays = 90;
+		let numberOfRays = 70;
 
 		for(let j = 0; j < numberOfRays; j++)
 		{
@@ -447,7 +462,7 @@ function reflections(point, directionVector, normal, reflectivity, diffusivity, 
 
 		let addedColor = new Vector3D(0, 0, 0);
 
-		let numberOfRays = 1 + (8 * diffusivity);
+		let numberOfRays = 1 + (9 * diffusivity);
 
 		let depth = zBuffer[bufferX];
 
@@ -496,9 +511,10 @@ function reflect(point, vector, normal)
 
 function setup()
 {
-	createCanvas(innerWidth / 2, innerHeight / 2);
+	createCanvas(Math.floor(canvasWidth), Math.floor(canvasWidth * 0.55));
 	background(0);
 	noStroke();
+	noLoop();
 }
 
 function draw()
