@@ -18,7 +18,7 @@ function windowResized()
 {
     if(window.innerWidth <= width) 
 	{
-		let newWidth = window.innerWidth * 0.9;
+		let newWidth = window.innerWidth * 0.8;
 		resizeCanvas(Math.floor(newWidth), Math.floor(newWidth * heightToWidthRatio));
 	}
 }
